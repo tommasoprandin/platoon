@@ -16,20 +16,34 @@ mod redb {
 
     use super::{engine::redb::RedbStorageEngine, log::LogStorage, state_machine::StateMachine};
 
-    pub struct RedbStorageBuilder {
-        storage_file: PathBuf,
-    }
+    pub struct RedbStorageBuilder {}
 
     impl RedbStorageBuilder {
         pub async fn new() -> Self {
+            Self {}
+        }
+
+        #[cfg(test)]
+        pub async fn build_test(
+            &self,
+            tempfile_path: &Path,
+        ) -> Result<
+            (
+                (),
+                LogStorage<RedbStorageEngine>,
+                StateMachine<RedbStorageEngine>,
+            ),
+            StorageError<raft::types::NodeId>,
+        > {
             if cfg!(test) {
-                Self {
-                    storage_file: PathBuf::from_str("testdb.redb").unwrap(),
-                }
+                let engine = Arc::new(RwLock::new(RedbStorageEngine::new(tempfile_path).await?));
+                Ok((
+                    (),
+                    LogStorage::new(engine.clone()),
+                    StateMachine::new(engine.clone()),
+                ))
             } else {
-                Self {
-                    storage_file: PathBuf::from_str("db.redb").unwrap(),
-                }
+                panic!("Cannot use build_test in a non test environment!");
             }
         }
     }
@@ -47,43 +61,23 @@ mod redb {
             ),
             StorageError<raft::types::NodeId>,
         > {
-            #[cfg(test)]
-            {
-                let engine = Arc::new(RwLock::new(
-                    RedbStorageEngine::new(Path::new(&self.storage_file)).await?,
-                ));
-                Ok((
-                    (),
-                    LogStorage::new(engine.clone()),
-                    StateMachine::new(engine.clone()),
-                ))
-            }
-            #[cfg(not(test))]
-            {
-                let engine = Arc::new(RwLock::new(
-                    RedbStorageEngine::new(Path::new(&self.storage_file)).await?,
-                ));
-                Ok((
-                    (),
-                    LogStorage::new(engine.clone()),
-                    StateMachine::new(engine.clone()),
-                ))
-            }
-        }
-    }
-
-    impl Drop for RedbStorageBuilder {
-        fn drop(&mut self) {
-            if cfg!(test) {
-                std::fs::remove_file(&self.storage_file).unwrap();
-            }
+            let engine = Arc::new(RwLock::new(
+                RedbStorageEngine::new(Path::new("db.redb")).await?,
+            ));
+            Ok((
+                (),
+                LogStorage::new(engine.clone()),
+                StateMachine::new(engine.clone()),
+            ))
         }
     }
 }
 
 // Generated test functions
+// Generated test functions
 #[cfg(test)]
 mod tests {
+    use async_tempfile::TempFile;
     use openraft::testing::StoreBuilder;
 
     use crate::raft::{
@@ -98,7 +92,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_last_membership_in_log_initial() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -112,7 +111,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_last_membership_in_log() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -126,7 +130,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_last_membership_in_log_multi_step() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -140,7 +149,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_membership_initial() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -154,7 +168,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_membership_from_log_and_empty_sm() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -168,7 +187,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_membership_from_empty_log_and_sm() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -182,7 +206,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_membership_from_log_le_sm_last_applied() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -196,7 +225,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_membership_from_log_gt_sm_last_applied_1() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -210,7 +244,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_membership_from_log_gt_sm_last_applied_2() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -224,7 +263,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_initial_state_without_init() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -238,7 +282,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_initial_state_membership_from_log_and_sm() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -252,7 +301,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_initial_state_with_state() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -266,7 +320,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_initial_state_last_log_gt_sm() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -280,7 +339,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_initial_state_last_log_lt_sm() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -294,7 +358,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_initial_state_log_ids() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -308,7 +377,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_initial_state_re_apply_committed() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -322,7 +396,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_save_vote() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -336,7 +415,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_log_entries() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -350,7 +434,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_limited_get_log_entries() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -364,7 +453,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_try_get_log_entry() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -378,7 +472,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_initial_logs() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -392,7 +491,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_log_state() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -406,7 +510,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_get_log_id() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -420,7 +529,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_last_id_in_log() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -434,7 +548,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_last_applied_state() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -448,7 +567,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_purge_logs_upto_0() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -462,7 +586,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_purge_logs_upto_5() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -476,7 +605,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_purge_logs_upto_20() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -490,7 +624,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_delete_logs_since_11() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -504,7 +643,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_delete_logs_since_0() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -518,7 +662,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_append_to_log() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -532,7 +681,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_snapshot_meta() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -546,7 +700,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_apply_single() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
@@ -560,7 +719,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_redb_store_apply_multiple() {
-        let (_, ls, sm) = RedbStorageBuilder::new().await.build().await.unwrap();
+        let tempfile = TempFile::new().await.unwrap();
+        let (_, ls, sm) = RedbStorageBuilder::new()
+            .await
+            .build_test(tempfile.file_path())
+            .await
+            .unwrap();
         openraft::testing::Suite::<
             TypeConfig,
             LogStorage<engine::redb::RedbStorageEngine>,
