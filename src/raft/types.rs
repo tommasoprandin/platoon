@@ -3,19 +3,23 @@ use std::{fmt::Display, io::Cursor};
 use openraft::{impls::OneshotResponder, BasicNode, RaftTypeConfig, SnapshotMeta, TokioRuntime};
 use serde::{Deserialize, Serialize};
 
-use crate::types;
 use crate::types::Vehicle;
+use crate::types::VehicleId;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Error {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Request {
-    VehicleUpdate(Vehicle),
+    Set(Vehicle),
+    Get(VehicleId),
 }
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Response {
-    pub result: Result<(), Error>,
+pub enum Response {
+    Blank,
+    Set(Result<(), Error>),
+    Get(Result<Option<Vehicle>, Error>),
+    Membership(Result<(), Error>),
 }
 pub type AsyncRuntime = TokioRuntime;
 pub type Node = BasicNode;

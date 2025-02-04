@@ -1,6 +1,6 @@
-mod engine;
+pub mod engine;
 mod log;
-mod state_machine;
+pub mod state_machine;
 
 mod redb {
     use std::{
