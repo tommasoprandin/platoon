@@ -1,3 +1,4 @@
+pub mod grpc;
 mod raft;
 mod types;
 

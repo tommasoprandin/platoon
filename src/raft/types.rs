@@ -1,25 +1,34 @@
 use std::{fmt::Display, io::Cursor};
 
+use openraft::StorageIOError;
 use openraft::{impls::OneshotResponder, BasicNode, RaftTypeConfig, SnapshotMeta, TokioRuntime};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::types::Vehicle;
 use crate::types::VehicleId;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Error {}
+#[derive(Debug, Serialize, Deserialize, Error)]
+pub enum Error {
+    #[error("I/O storage error")]
+    Storage(#[from] StorageIOError<NodeId>),
+    #[error("Generic error: {0}")]
+    Generic(String),
+}
+
+type RaftResult<T> = Result<T, Error>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Request {
     Set(Vehicle),
-    Get(VehicleId),
+    Delete(VehicleId),
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Response {
     Blank,
-    Set(Result<(), Error>),
-    Get(Result<Option<Vehicle>, Error>),
-    Membership(Result<(), Error>),
+    Set(RaftResult<()>),
+    Delete(RaftResult<()>),
+    Membership(RaftResult<()>),
 }
 pub type AsyncRuntime = TokioRuntime;
 pub type Node = BasicNode;

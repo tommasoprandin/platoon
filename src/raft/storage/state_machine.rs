@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     raft::{
         self,
-        types::{Response, StoredSnapshot},
+        types::{Request, Response, StoredSnapshot},
     },
     types,
 };
@@ -106,19 +106,24 @@ where
         for entry in entries {
             match entry.payload {
                 EntryPayload::Blank => {
-                    responses.push(Response { result: Ok(()) });
+                    responses.push(Response::Blank);
                     data.last_applied = Some(entry.log_id);
                 }
                 EntryPayload::Normal(payload) => match payload {
-                    raft::types::Request::VehicleUpdate(vehicle) => {
+                    Request::Set(vehicle) => {
                         data.state.insert(vehicle.id.clone(), vehicle);
-                        responses.push(Response { result: Ok(()) });
+                        responses.push(Response::Set(Ok(())));
+                        data.last_applied = Some(entry.log_id);
+                    }
+                    Request::Delete(vehicle_id) => {
+                        let _ = data.state.remove(&vehicle_id);
+                        responses.push(Response::Delete(Ok(())));
                         data.last_applied = Some(entry.log_id);
                     }
                 },
                 EntryPayload::Membership(membership) => {
                     data.membership = StoredMembership::new(Some(entry.log_id), membership);
-                    responses.push(Response { result: Ok(()) });
+                    responses.push(Response::Membership(Ok(())));
                     data.last_applied = Some(entry.log_id);
                 }
             }

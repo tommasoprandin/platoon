@@ -1,140 +1,49 @@
-syntax = "proto3";
+syntax = "proto2";
 
-import "google/protobuf/empty.proto";
-import "app.proto";
-
-package openraftpb;
-
-// Node represents a single node in the Raft cluster
-message Node {
-  string address = 1; // RPC address for node communication
-  uint64 node_id = 2;  // Unique identifier for the node
-}
-
-// LeaderId represents the leader identifier in Raft
-message LeaderId {
-  uint64 term = 1;
-  uint64 voted_for = 2; // Id of the node voted for
-}
-
-// Vote represents the voting information in Raft leader election
-message Vote {
-  LeaderId leader_id = 1;
-  bool committed = 2;
-}
-
-message Entry {
-  LogId log_id = 1;
-
-  // Optional Application data (mutually exclusive)
-  oneof payload {
-    SetRequest set_data = 3;
-    GetRequest get_data = 4;
-    Membership membership = 5;
-  }
-}
-
-// NodeIds is a set of NodeIds
-message NodeIdSet {
-  map<uint64, google.protobuf.Empty> node_ids = 1;
-}
-
-// Membership config
-message Membership {
-  // Joint(includes more than one NodeIdSet) or uniform(one NodeIdSet) config.
-  repeated NodeIdSet configs = 1;
-
-  // All of the nodes in the cluster, including voters and learners.
-  // A node id that is included in `configs` is a voter, otherwise it is a learner.
-  map<uint64, Node> nodes = 2;
-}
-
-// LogId represents the log identifier in Raft
-message LogId {
-  LeaderId leader_id = 1; // id of the leader proposing the log
-  uint64 index = 2;
-}
-
-// VoteRequest represents a request for votes during leader election
-message VoteRequest {
-  Vote vote = 1;
-  LogId last_log_id = 2;
-}
-
-// VoteResponse represents the response to a vote request
-message VoteResponse {
-  Vote vote = 1;
-  bool vote_granted = 2;
-  LogId last_log_id = 3;
-}
+import "types.proto";
+package node;
 
 message AppendEntriesRequest {
-  // The leader's vote, used to identify the leader, and must be committed
-  Vote vote = 1;
-
-  // The previous log id the leader has sent to the follower
-  LogId prev_log_id = 2;
-
-  // The entries to be appended to the follower's log
-  repeated Entry entries = 3;
-
-  // The leader's last committed log id
-  LogId leader_commit = 4;
+  required types.Vote vote = 1;
+  optional types.LogId prev_log_id = 2;
+  repeated types.Entry entries = 3;
+  optional types.LogId leader_commit = 4;
 }
+
+message Success {}
+message PartialSuccess { optional types.LogId upto = 1; }
+message Conflict {}
+message HigherVote { required types.Vote mine = 1; }
 
 message AppendEntriesResponse {
-  // If not None, the follower rejected the AppendEntries request due to having a higher vote.
-  // All other fields are valid only when this field is None
-  Vote rejected_by = 1;
-
-  // The follower accepts this AppendEntries request's vote, but the prev_log_id conflicts with
-  // the follower's log. The leader should retry with a smaller prev_log_id that matches the
-  // follower's log. All subsequent fields are valid only when this field is false
-  bool conflict = 2;
-
-  // The last log id the follower accepted from this request.
-  // If None, all input entries were accepted and persisted.
-  // Otherwise, only entries up to and including this id were accepted
-  LogId last_log_id = 3;
-}
-
-// The first chunk of snapshot transmission, which contains the snapshot meta.
-message SnapshotRequestMeta {
-  Vote vote = 1;
-
-  message SnapshotMeta {
-    LogId last_log_id = 1;
-    LogId last_membership_log_id = 2;
-    Membership last_membership = 3;
-  };
-
-  string snapshot_id = 5;
-}
-
-// The item of snapshot chunk stream.
-//
-// The first item contains `meta`, including the leader vote and snapshot-meta.
-//
-// Since the second item, the chunk contains the snapshot data.
-message SnapshotRequest {
-  oneof payload {
-    SnapshotRequestMeta meta = 1;
-    bytes chunk = 2;
+  oneof status {
+    Success success = 1;
+    PartialSuccess partial_success = 2;
+    Conflict conflict = 3;
+    HigherVote higher_vote = 4;
   }
 }
 
-message SnapshotResponse {
-  Vote vote = 1;
+message VoteRequest {
+  required types.Vote vote = 1;
+  optional types.LogId last_log_id = 2;
 }
 
-// InternalService handles internal Raft cluster communication
+message VoteResponse {
+  required types.Vote vote = 1;
+  required bool vote_granted = 2;
+  optional types.LogId last_log_id = 3;
+}
+
+message SnapshotRequest {
+  required types.Vote vote = 1;
+  required types.Snapshot snapshot = 2;
+}
+
+message SnapshotResponse { required types.Vote vote = 1; }
+
 service RaftService {
-  // Vote handles vote requests between Raft nodes during leader election
-  rpc Vote(VoteRequest) returns (VoteResponse) {}
-
-  // AppendEntries handles call related to append entries RPC
-  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
-
-  // Snapshot handles install snapshot RPC
-  rpc Snapshot(stream SnapshotRequest) returns (SnapshotResponse) {}
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
+  rpc Vote(VoteRequest) returns (VoteResponse);
+  rpc InstallSnapshot(SnapshotRequest) returns (SnapshotResponse);
 }

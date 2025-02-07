@@ -10,6 +10,7 @@ openraft = { version = "0.9.17", features = [
     "serde",
     "single-term-leader",
     "storage-v2",
+    "generic-snapshot-data",
 ] }
 prost = "0.13.4"
 redb = "2.4.0"
