@@ -1,0 +1,38 @@
+version: "3"
+
+services:
+  node1:
+    image: "tommy/platoon"
+    networks:
+      - shared
+    environment:
+      - NODE_ID=1
+      - RUST_LOG=info
+    expose:
+      - 5001
+  node2:
+    image: "tommy/platoon"
+    networks:
+      - shared
+    environment:
+      - NODE_ID=2
+      - RUST_LOG=info
+    expose:
+      - 5001
+  node3:
+    image: "tommy/platoon"
+    networks:
+      - shared
+    environment:
+      - NODE_ID=3
+      - RUST_LOG=info
+    expose:
+      - 5001
+  tester:
+    image: debian
+    networks:
+      - shared
+    command: "tail -f /dev/null"
+networks:
+  shared:
+    driver: "bridge"
