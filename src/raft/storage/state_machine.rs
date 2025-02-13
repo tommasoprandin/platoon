@@ -17,12 +17,14 @@ use crate::{
 
 use super::engine::StorageEngine;
 
+#[derive(Debug)]
 struct StateMachineData {
     state: BTreeMap<types::VehicleId, types::Vehicle>,
     membership: StoredMembership<raft::types::NodeId, raft::types::Node>,
     last_applied: Option<LogId<raft::types::NodeId>>,
 }
 
+#[derive(Debug, Clone)]
 pub struct StateMachine<SE: StorageEngine + OptionalSend + OptionalSync> {
     data: Arc<RwLock<StateMachineData>>,
     storage: Arc<RwLock<SE>>,

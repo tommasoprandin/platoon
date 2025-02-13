@@ -1,5 +1,5 @@
 pub mod engine;
-mod log;
+pub mod log;
 pub mod state_machine;
 
 mod redb {

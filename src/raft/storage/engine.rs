@@ -223,6 +223,7 @@ pub mod redb {
         LastPurged = 1,
     }
 
+    #[derive(Debug, Clone)]
     pub struct RedbStorageEngine {
         db: Arc<redb::Database>,
     }
