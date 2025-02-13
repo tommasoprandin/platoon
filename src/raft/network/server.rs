@@ -7,12 +7,13 @@ use crate::grpc::{self, node::raft_service_server::RaftService};
 
 use super::utils;
 
-struct Server {
+#[derive(Clone)]
+pub struct Server {
     raft: Arc<RwLock<Raft<crate::raft::types::TypeConfig>>>,
 }
 
 impl Server {
-    fn new(raft_instance: Arc<RwLock<Raft<crate::raft::types::TypeConfig>>>) -> Self {
+    pub fn new(raft_instance: Arc<RwLock<Raft<crate::raft::types::TypeConfig>>>) -> Self {
         Self {
             raft: raft_instance.clone(),
         }

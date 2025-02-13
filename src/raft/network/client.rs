@@ -6,15 +6,17 @@ use openraft::{
     raft::{AppendEntriesResponse, SnapshotResponse, VoteResponse},
     OptionalSend, RaftNetwork, RaftNetworkFactory,
 };
+use tracing::{instrument, Level};
 
 use crate::{
     grpc::node::{raft_service_client::RaftServiceClient, SnapshotRequest},
     raft::{self, types::TypeConfig},
 };
 
-struct Client(String);
+#[derive(Debug)]
+pub struct Client(String);
 
-struct ClientFactory();
+pub struct ClientFactory();
 
 impl RaftNetworkFactory<TypeConfig> for ClientFactory {
     type Network = Client;
@@ -54,9 +56,9 @@ impl RaftNetwork<TypeConfig> for Client {
         VoteResponse<raft::types::NodeId>,
         RPCError<raft::types::NodeId, raft::types::Node, RaftError<raft::types::NodeId>>,
     > {
-        let mut client = RaftServiceClient::connect(format!("https://{}", &self.0))
-            .await
-            .unwrap();
+        let addr = format!("http://{}", &self.0);
+        tracing::event!(Level::INFO, address = addr);
+        let mut client = RaftServiceClient::connect(addr).await.unwrap();
 
         let request = tonic::Request::new(rpc.into());
 
@@ -74,7 +76,7 @@ impl RaftNetwork<TypeConfig> for Client {
         SnapshotResponse<raft::types::NodeId>,
         StreamingError<TypeConfig, Fatal<raft::types::NodeId>>,
     > {
-        let mut client = RaftServiceClient::connect(format!("https://{}", &self.0))
+        let mut client = RaftServiceClient::connect(format!("http://{}", &self.0))
             .await
             .unwrap();
 
