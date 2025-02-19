@@ -1,38 +1,32 @@
-version: "3"
+x-node: &node
+  image: tommy/platoon
+  networks:
+    - shared
+  expose:
+    - 5001
 
 services:
   node1:
-    image: "tommy/platoon"
-    networks:
-      - shared
+    <<: *node
     environment:
       - NODE_ID=1
       - RUST_LOG=info
-    expose:
-      - 5001
+    ports:
+      - 8001:8001
   node2:
-    image: "tommy/platoon"
-    networks:
-      - shared
+    <<: *node
     environment:
       - NODE_ID=2
       - RUST_LOG=info
-    expose:
-      - 5001
+    ports:
+      - 8002:8001
   node3:
-    image: "tommy/platoon"
-    networks:
-      - shared
+    <<: *node
     environment:
       - NODE_ID=3
       - RUST_LOG=info
-    expose:
-      - 5001
-  tester:
-    image: debian
-    networks:
-      - shared
-    command: "tail -f /dev/null"
+    ports:
+      - 8003:8001
 networks:
   shared:
     driver: "bridge"

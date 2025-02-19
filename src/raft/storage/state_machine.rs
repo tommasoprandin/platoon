@@ -41,6 +41,16 @@ impl<SE: StorageEngine + OptionalSend + OptionalSync> StateMachine<SE> {
             storage,
         }
     }
+
+    pub async fn get_state(&self) -> Vec<types::Vehicle> {
+        let inner = self.data.read().await;
+
+        inner
+            .state
+            .iter()
+            .map(|(_, vehicle)| vehicle.clone())
+            .collect()
+    }
 }
 
 impl<SE> RaftSnapshotBuilder<raft::types::TypeConfig> for StateMachine<SE>

@@ -1,1 +1,26 @@
+syntax = "proto2";
 
+import "types.proto";
+import "google/protobuf/empty.proto";
+package app;
+
+message Result {
+  required bool ok = 1;
+  optional string error = 2;
+}
+
+message UpdateVehicleRequest { required types.Vehicle vehicle = 1; }
+
+message UpdateVehicleResponse { required Result result = 1; }
+
+message DeleteVehicleRequest { required string vehicle_id = 1; }
+
+message DeleteVehicleResponse { required Result result = 1; }
+
+message GetPlatoonResponse { repeated types.Vehicle vehicles = 1; }
+
+service PlatoonService {
+  rpc UpdateVehicle(UpdateVehicleRequest) returns (UpdateVehicleResponse);
+  rpc DeleteVehicle(DeleteVehicleRequest) returns (DeleteVehicleResponse);
+  rpc GetPlatoon(google.protobuf.Empty) returns (GetPlatoonResponse);
+}

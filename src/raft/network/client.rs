@@ -1,17 +1,22 @@
 use std::future::Future;
 
 use openraft::{
-    error::{Fatal, RPCError, RaftError, ReplicationClosed, StreamingError},
+    error::{
+        Fatal, NetworkError, RPCError, RaftError, ReplicationClosed, StreamingError, Timeout,
+        Unreachable,
+    },
     network::RPCOption,
     raft::{AppendEntriesResponse, SnapshotResponse, VoteResponse},
-    OptionalSend, RaftNetwork, RaftNetworkFactory,
+    AnyError, OptionalSend, RPCTypes, RaftNetwork, RaftNetworkFactory,
 };
-use tracing::{instrument, Level};
+use tracing::instrument;
 
 use crate::{
     grpc::node::{raft_service_client::RaftServiceClient, SnapshotRequest},
     raft::{self, types::TypeConfig},
 };
+
+use crate::grpc::utils::tonic_status_to_rpc_error;
 
 #[derive(Debug)]
 pub struct Client(String);
@@ -31,63 +36,120 @@ impl RaftNetworkFactory<TypeConfig> for ClientFactory {
 }
 
 impl RaftNetwork<TypeConfig> for Client {
+    #[instrument(level = "debug")]
     async fn append_entries(
         &mut self,
         rpc: openraft::raft::AppendEntriesRequest<TypeConfig>,
-        _option: RPCOption,
+        option: RPCOption,
     ) -> Result<
         AppendEntriesResponse<raft::types::NodeId>,
         RPCError<raft::types::NodeId, raft::types::Node, RaftError<raft::types::NodeId>>,
     > {
-        let mut client = RaftServiceClient::connect(format!("https://{}", &self.0))
+        let mut client = RaftServiceClient::connect(format!("http://{}", &self.0))
             .await
-            .unwrap();
+            .map_err(|err| {
+                tracing::error!(
+                    message = format!("Error connecting to {}", &self.0),
+                    error = err.to_string()
+                );
+                RPCError::Unreachable(Unreachable::new(&err))
+            })?;
 
-        let request = tonic::Request::new(rpc.into());
+        let mut request = tonic::Request::new(rpc.into());
+        request.set_timeout(option.soft_ttl());
 
-        let response = client.append_entries(request).await.unwrap();
-        Ok(response.into_inner().into())
+        let response = client.append_entries(request).await;
+
+        match response {
+            Ok(res) => {
+                tracing::debug!("append_entries RPC success");
+                Ok(res.into_inner().into())
+            }
+            Err(status) => {
+                tracing::error!(message = "Error sending append_entries RPC", ?status);
+                Err(tonic_status_to_rpc_error(status))
+            }
+        }
     }
+
+    #[instrument(level = "debug")]
     async fn vote(
         &mut self,
         rpc: openraft::raft::VoteRequest<raft::types::NodeId>,
-        _option: RPCOption,
+        option: RPCOption,
     ) -> Result<
         VoteResponse<raft::types::NodeId>,
         RPCError<raft::types::NodeId, raft::types::Node, RaftError<raft::types::NodeId>>,
     > {
-        let addr = format!("http://{}", &self.0);
-        tracing::event!(Level::INFO, address = addr);
-        let mut client = RaftServiceClient::connect(addr).await.unwrap();
+        let mut client = RaftServiceClient::connect(format!("http://{}", &self.0))
+            .await
+            .map_err(|err| {
+                tracing::error!(
+                    message = format!("Error connecting to {}", &self.0),
+                    error = err.to_string()
+                );
+                RPCError::Unreachable(Unreachable::new(&err))
+            })?;
 
-        let request = tonic::Request::new(rpc.into());
+        let mut request = tonic::Request::new(rpc.into());
+        request.set_timeout(option.soft_ttl());
 
-        let response = client.vote(request).await.unwrap();
-        Ok(response.into_inner().into())
+        let response = client.vote(request).await;
+
+        match response {
+            Ok(res) => {
+                tracing::debug!("vote RPC success");
+                Ok(res.into_inner().into())
+            }
+            Err(status) => {
+                tracing::error!(message = "Error sending vote RPC", ?status);
+                Err(tonic_status_to_rpc_error(status))
+            }
+        }
     }
 
+    #[instrument(level = "debug", skip(_cancel))]
     async fn full_snapshot(
         &mut self,
         vote: openraft::Vote<raft::types::NodeId>,
         snapshot: openraft::Snapshot<TypeConfig>,
         _cancel: impl Future<Output = ReplicationClosed> + OptionalSend + 'static,
-        _option: RPCOption,
+        option: RPCOption,
     ) -> Result<
         SnapshotResponse<raft::types::NodeId>,
         StreamingError<TypeConfig, Fatal<raft::types::NodeId>>,
     > {
         let mut client = RaftServiceClient::connect(format!("http://{}", &self.0))
             .await
-            .unwrap();
+            .map_err(|err| {
+                tracing::error!(
+                    message = format!("Error connecting to {}", &self.0),
+                    error = err.to_string()
+                );
+                StreamingError::Unreachable(Unreachable::new(&err))
+            })?;
 
         let rpc = SnapshotRequest {
             vote: vote.into(),
             snapshot: snapshot.into(),
         };
 
-        let request = tonic::Request::new(rpc.into());
+        let mut request = tonic::Request::new(rpc.into());
+        request.set_timeout(option.soft_ttl());
 
-        let response = client.install_snapshot(request).await.unwrap();
-        Ok(response.into_inner().into())
+        let response = client.install_snapshot(request).await;
+
+        match response {
+            Ok(res) => {
+                tracing::debug!("full_snapshot RPC success");
+                Ok(res.into_inner().into())
+            }
+            Err(status) => {
+                tracing::error!(message = "Error sending full_snapshot RPC", ?status);
+                Err(StreamingError::Network(NetworkError::new(
+                    &AnyError::error(status.to_string()),
+                )))
+            }
+        }
     }
 }

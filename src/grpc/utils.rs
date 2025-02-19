@@ -1,18 +1,25 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
+    error::Error,
     io::Cursor,
 };
 
 use openraft::{
-    error::{Fatal, Infallible, RaftError},
+    error::{
+        Fatal, Infallible, NetworkError, PayloadTooLarge, RPCError, RaftError, RemoteError,
+        Timeout, Unreachable,
+    },
     raft::{self, SnapshotResponse, VoteRequest, VoteResponse},
-    CommittedLeaderId, EntryPayload, Snapshot, StoredMembership,
+    AnyError, CommittedLeaderId, EntryPayload, Snapshot, StoredMembership,
 };
+use tonic::Code::{Aborted, Cancelled, DeadlineExceeded, Unavailable};
 
 use crate::{
     grpc::{self, node::append_entries_response::Status, types::NodeIdSet},
     raft::types::{Request, TypeConfig},
 };
+
+use super::app::UpdateVehicleResponse;
 
 impl From<grpc::types::Vote> for crate::raft::types::Vote {
     fn from(value: grpc::types::Vote) -> Self {
@@ -279,6 +286,7 @@ impl From<grpc::node::AppendEntriesResponse>
         }
     }
 }
+
 pub fn raft_error_to_tonic_status(
     value: RaftError<crate::raft::types::NodeId, Infallible>,
 ) -> tonic::Status {
@@ -288,6 +296,17 @@ pub fn raft_error_to_tonic_status(
         }
         openraft::error::RaftError::Fatal(fatal) => fatal_to_tonic_status(fatal),
     }
+}
+
+pub fn tonic_status_to_rpc_error(
+    value: tonic::Status,
+) -> RPCError<
+    crate::raft::types::NodeId,
+    crate::raft::types::Node,
+    RaftError<crate::raft::types::NodeId>,
+> {
+    let err = AnyError::error(value.to_string());
+    RPCError::Network(NetworkError::new(&err))
 }
 
 pub fn fatal_to_tonic_status(value: Fatal<crate::raft::types::NodeId>) -> tonic::Status {

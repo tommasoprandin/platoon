@@ -1,26 +1,32 @@
-use std::{collections::BTreeMap, future::poll_fn, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 
-use grpc::node::raft_service_server::RaftServiceServer;
+use grpc::{
+    app::platoon_service_server::PlatoonServiceServer,
+    node::raft_service_server::RaftServiceServer, types::APP_FILE_DESCRIPTOR,
+};
 use openraft::{BasicNode, Config, Raft};
 use raft::{
-    network::{client::ClientFactory, server::Server},
+    network::{client::ClientFactory, server::RaftServer},
     storage::{engine::redb::RedbStorageEngine, log::LogStorage, state_machine::StateMachine},
-    types::Request,
 };
-use tokio::sync::RwLock;
-use tracing::info;
-use tracing_subscriber::EnvFilter;
+use server::PlatoonServer;
+use tokio::{select, sync::RwLock};
+use tonic_reflection::server::Builder as ReflectionBuilder;
+use tracing::instrument;
 
 pub mod grpc;
 mod raft;
+mod server;
 mod types;
 
 #[tokio::main]
+#[instrument]
 async fn main() {
     // Tracing
-    let _ = tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(EnvFilter::from_default_env())
+    console_subscriber::ConsoleLayer::builder()
+        .server_addr(([0, 0, 0, 0], 6669))
         .init();
+
     // Create raft instance
     // Create storage
     let storage_engine = Arc::new(RwLock::new(
@@ -42,30 +48,19 @@ async fn main() {
     // Create log store
     let log_store = LogStorage::new(storage_engine.clone());
     // Create raft instance
-    let raft = Arc::new(RwLock::new(
-        Raft::new(id, config, network, log_store, state_machine.clone())
-            .await
-            .expect("Failed to instantiate raft!"),
-    ));
+    let raft = Raft::new(id, config, network, log_store, state_machine.clone())
+        .await
+        .expect("Failed to instantiate raft!");
 
-    // Bring up Raft internal gRPC service
-    let raft_clone = raft.clone();
-    tokio::spawn(async move {
-        let raft = raft_clone;
-        let raft_server = Server::new(raft.clone());
-        let address = "0.0.0.0:5001";
-        tonic::transport::Server::builder()
-            .add_service(RaftServiceServer::new(raft_server))
-            .serve(
-                address
-                    .parse()
-                    .expect(format!("Invalid address {address}").as_str()),
-            )
-            .await
-            .expect(format!("Failed to bring up gRPC server at {address}").as_str());
-    });
+    // Bring up Raft gRPC server
+    let raft_server = RaftServer::new(raft.clone());
+    let raft_server_jh = raft_server.start();
 
-    tokio::time::sleep(Duration::from_millis(1_000)).await;
+    // Bring up App gRPC server
+    let platoon_server = PlatoonServer::new(raft.clone(), state_machine.clone());
+    let platoon_server_jh = platoon_server.start();
+
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     // Nodes (static cluster) initialized by node 1
     if id == 1 {
@@ -74,28 +69,16 @@ async fn main() {
         nodes.insert(2, BasicNode::new("node2:5001"));
         nodes.insert(3, BasicNode::new("node3:5001"));
         // Initialize raft instance
-        let _ = raft.write().await.initialize(nodes).await;
+        let res = raft.initialize(nodes).await;
+        match res {
+            Ok(_) => tracing::info!("Raft cluster started!"),
+            Err(err) => tracing::error!("Error starting raft cluster: {}", err.to_string()),
+        }
     }
 
-    loop {
-        if id == 2 {
-            let raft_instance = raft.write().await;
-            let vehicle = types::Vehicle {
-                id: "1".to_owned(),
-                position: types::VehiclePosition { x: 1.0, y: 2.0 },
-                speed: types::VehicleSpeed {
-                    speed: 1.0,
-                    heading: 2.0,
-                },
-            };
-            let res = raft_instance
-                .client_write(Request::Set(vehicle.clone()))
-                .await;
-            tracing::info!("Updated vehicle {vehicle:?} with response {res:?}");
-        }
-        tokio::time::sleep(Duration::from_millis(2_000)).await;
-        let raft_instance = raft.read().await;
-        let _ = raft_instance.ensure_linearizable().await;
-        info!("{:?}", state_machine);
+    // These tasks should never terminate, so we stop as soon as one stops with an error message
+    select! {
+        _ = raft_server_jh => tracing::error!("Raft gRPC server terminated"),
+        _ = platoon_server_jh => tracing::error!("App gRPC server terminated"),
     }
 }
