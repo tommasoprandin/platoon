@@ -13,6 +13,9 @@ services:
       - RUST_LOG=info
       - RAFT_SERVER_PORT=5001
       - PLATOON_SERVER_PORT=8001
+      - RND_SEED=123123123
+      - READ_PERIOD=500
+      - WRITE_PERIOD=1000
     ports:
       - 8001:8001
   node2:
@@ -22,6 +25,9 @@ services:
       - RUST_LOG=info
       - RAFT_SERVER_PORT=5001
       - PLATOON_SERVER_PORT=8001
+      - RND_SEED=456456456
+      - READ_PERIOD=500
+      - WRITE_PERIOD=1000
     ports:
       - 8002:8001
   node3:
@@ -31,6 +37,9 @@ services:
       - RUST_LOG=info
       - RAFT_SERVER_PORT=5001
       - PLATOON_SERVER_PORT=8001
+      - RND_SEED=789789789
+      - READ_PERIOD=500
+      - WRITE_PERIOD=1000
     ports:
       - 8003:8001
 networks:

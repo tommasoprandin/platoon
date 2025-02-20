@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 
+use client::PlatoonClient;
 use openraft::{BasicNode, Config, Raft};
 use raft::{
     network::{client::ClientFactory, server::RaftServer},
@@ -9,6 +10,7 @@ use server::PlatoonServer;
 use tokio::{select, sync::RwLock};
 use tracing::instrument;
 
+mod client;
 pub mod grpc;
 mod raft;
 mod server;
@@ -38,6 +40,21 @@ async fn main() {
         .expect("Variable PLATOON_SERVER_PORT is not set")
         .parse()
         .expect("Failed to parse env var PLATOON_SERVER_PORT into u16");
+    // Seed for random operations
+    let seed: u64 = std::env::var("RND_SEED")
+        .expect("Variable RND_SEED is not set")
+        .parse()
+        .expect("Failed to parse env var RND_SEED into u64");
+    // Client write period
+    let write_period: u64 = std::env::var("WRITE_PERIOD")
+        .expect("Variable WRITE_PERIOD is not set")
+        .parse()
+        .expect("Failed to parse env var WRITE_PERIOD into u64");
+    // Client read period
+    let read_period: u64 = std::env::var("READ_PERIOD")
+        .expect("Variable READ_PERIOD is not set")
+        .parse()
+        .expect("Failed to parse env var READ_PERIOD into u64");
 
     // Create raft instance
     // Create storage
@@ -86,9 +103,23 @@ async fn main() {
         }
     }
 
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Now start client
+    let client = PlatoonClient::new(
+        id.to_string(),
+        platoon_server_port,
+        seed,
+        Duration::from_millis(read_period),
+        Duration::from_millis(write_period),
+    );
+    let (platoon_client_read_jh, platoon_client_write_jh) = client.start();
+
     // These tasks should never terminate, so we stop as soon as one stops with an error message
     select! {
         _ = raft_server_jh => tracing::error!("Raft gRPC server terminated"),
         _ = platoon_server_jh => tracing::error!("App gRPC server terminated"),
+        _ = platoon_client_read_jh => tracing::error!("App read client terminated"),
+        _ = platoon_client_write_jh => tracing::error!("App write client terminated")
     }
 }

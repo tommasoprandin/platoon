@@ -33,5 +33,7 @@ tonic-reflection = "0.12.3"
 uuid = { version = "1.12.1", features = ["v6", "v7", "fast-rng"] }
 tracing = { version = "0.1", features = ["log"] }
 rand = { version = "0.9.0", features = ["small_rng"] }
+lazy_static = "1.5.0"
+rand_distr = "0.5.1"
 [build-dependencies]
 tonic-build = "0.12.3"
