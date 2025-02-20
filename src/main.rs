@@ -1,9 +1,5 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 
-use grpc::{
-    app::platoon_service_server::PlatoonServiceServer,
-    node::raft_service_server::RaftServiceServer, types::APP_FILE_DESCRIPTOR,
-};
 use openraft::{BasicNode, Config, Raft};
 use raft::{
     network::{client::ClientFactory, server::RaftServer},
@@ -11,7 +7,6 @@ use raft::{
 };
 use server::PlatoonServer;
 use tokio::{select, sync::RwLock};
-use tonic_reflection::server::Builder as ReflectionBuilder;
 use tracing::instrument;
 
 pub mod grpc;
@@ -27,6 +22,23 @@ async fn main() {
         .server_addr(([0, 0, 0, 0], 6669))
         .init();
 
+    // Environment
+    // Node id
+    let id: u64 = std::env::var("NODE_ID")
+        .expect("Variable NODE_ID is not set")
+        .parse()
+        .expect("Failed to parse env var NODE_ID into u64");
+    // Raft server port
+    let raft_server_port: u16 = std::env::var("RAFT_SERVER_PORT")
+        .expect("Variable RAFT_SERVER_PORT is not set")
+        .parse()
+        .expect("Failed to parse env var RAFT_SERVER_PORT into u16");
+    // App server port
+    let platoon_server_port: u16 = std::env::var("PLATOON_SERVER_PORT")
+        .expect("Variable PLATOON_SERVER_PORT is not set")
+        .parse()
+        .expect("Failed to parse env var PLATOON_SERVER_PORT into u16");
+
     // Create raft instance
     // Create storage
     let storage_engine = Arc::new(RwLock::new(
@@ -34,11 +46,6 @@ async fn main() {
             .await
             .expect("Failed to instantiate redb storage engine!"),
     ));
-    // Node id
-    let id: u64 = std::env::var("NODE_ID")
-        .expect("Variable NODE_ID is not set")
-        .parse()
-        .expect("Failed to parse env var NODE_ID into u64");
     // Raft config
     let config = Arc::new(Config::default().validate().unwrap());
     // Raft internal gRPC client
@@ -53,12 +60,15 @@ async fn main() {
         .expect("Failed to instantiate raft!");
 
     // Bring up Raft gRPC server
-    let raft_server = RaftServer::new(raft.clone());
+    let raft_server = RaftServer::new(raft.clone(), raft_server_port);
     let raft_server_jh = raft_server.start();
+    tracing::info!("Raft server started on port {raft_server_port}");
 
     // Bring up App gRPC server
-    let platoon_server = PlatoonServer::new(raft.clone(), state_machine.clone());
+    let platoon_server =
+        PlatoonServer::new(raft.clone(), state_machine.clone(), platoon_server_port);
     let platoon_server_jh = platoon_server.start();
+    tracing::info!("App server started on port {platoon_server_port}");
 
     tokio::time::sleep(Duration::from_secs(5)).await;
 

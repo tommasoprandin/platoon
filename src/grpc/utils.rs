@@ -1,25 +1,18 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    error::Error,
     io::Cursor,
 };
 
 use openraft::{
-    error::{
-        Fatal, Infallible, NetworkError, PayloadTooLarge, RPCError, RaftError, RemoteError,
-        Timeout, Unreachable,
-    },
+    error::{Fatal, Infallible, NetworkError, RPCError, RaftError},
     raft::{self, SnapshotResponse, VoteRequest, VoteResponse},
     AnyError, CommittedLeaderId, EntryPayload, Snapshot, StoredMembership,
 };
-use tonic::Code::{Aborted, Cancelled, DeadlineExceeded, Unavailable};
 
 use crate::{
     grpc::{self, node::append_entries_response::Status, types::NodeIdSet},
     raft::types::{Request, TypeConfig},
 };
-
-use super::app::UpdateVehicleResponse;
 
 impl From<grpc::types::Vote> for crate::raft::types::Vote {
     fn from(value: grpc::types::Vote) -> Self {

@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use openraft::{
-    error::{ClientWriteError, RaftError},
+    error::{CheckIsLeaderError, ClientWriteError, RaftError},
     OptionalSend, OptionalSync, Raft,
 };
-use tokio::{sync::RwLock, task::JoinHandle};
+use tokio::task::JoinHandle;
 use tonic::transport::Error;
 use tonic_reflection::server::Builder as ReflectionBuilder;
 use tracing::instrument;
@@ -33,34 +31,33 @@ where
 {
     raft: Raft<TypeConfig>,
     state_machine: StateMachine<SE>,
+    port: u16,
 }
 
 impl<SE> PlatoonServer<SE>
 where
     SE: StorageEngine + OptionalSend + OptionalSync + Clone + 'static,
 {
-    pub fn new(raft: Raft<TypeConfig>, state_machine: StateMachine<SE>) -> Self {
+    pub fn new(raft: Raft<TypeConfig>, state_machine: StateMachine<SE>, port: u16) -> Self {
         Self {
             raft,
             state_machine,
+            port,
         }
     }
 
-    pub fn start(&self) -> JoinHandle<Result<(), Error>> {
-        let raft_instance = self.raft.clone();
-        let sm_instance = self.state_machine.clone();
+    pub fn start(self) -> JoinHandle<Result<(), Error>> {
         tokio::task::spawn(async move {
-            static ADDRESS: &'static str = "0.0.0.0:8001";
-            let app_service = PlatoonServer::new(raft_instance, sm_instance);
+            let address = format!("0.0.0.0:{}", self.port);
             let reflection_service = ReflectionBuilder::configure()
                 .register_encoded_file_descriptor_set(APP_FILE_DESCRIPTOR)
                 .build_v1()
                 .expect("Failed to build reflection service");
 
             tonic::transport::Server::builder()
-                .add_service(PlatoonServiceServer::new(app_service))
+                .add_service(PlatoonServiceServer::new(self))
                 .add_service(reflection_service)
-                .serve(ADDRESS.parse().expect("Invalid address"))
+                .serve(address.parse().expect("Invalid address"))
                 .await
         })
     }
@@ -119,8 +116,9 @@ where
                                     ))?;
 
                             let leader_addr = format!(
-                                "http://{}:8001",
-                                &leader.addr.split_once(":").expect("Wrong address format").0
+                                "http://{}:{}",
+                                &leader.addr.split_once(":").expect("Wrong address format").0,
+                                self.port
                             );
                             tracing::info!(address = leader_addr, "Forwarding request to leader");
                             let mut client =
@@ -193,7 +191,11 @@ where
                                         "Leader is currently unavailable",
                                     ))?;
 
-                            let leader_addr = format!("http://{}", &leader.addr);
+                            let leader_addr = format!(
+                                "http://{}:{}",
+                                &leader.addr.split_once(":").expect("Wrong address format").0,
+                                self.port
+                            );
                             tracing::info!(address = leader_addr, "Forwarding request to leader");
                             let mut client =
                                 PlatoonServiceClient::connect(leader_addr).await.unwrap();
@@ -213,14 +215,13 @@ where
                         }
                     },
                     RaftError::Fatal(err) => {
-                        let error_message = err.to_string();
                         tracing::error!(
                             message = "Fatal error in delete_vehicle",
                             error = err.to_string()
                         );
                         Err(tonic::Status::internal(format!(
                             "Fatal internal error: {}",
-                            error_message
+                            err.to_string().as_str()
                         )))
                     }
                 }
@@ -233,10 +234,64 @@ where
         &self,
         _request: tonic::Request<()>,
     ) -> Result<tonic::Response<GetPlatoonResponse>, tonic::Status> {
-        let vehicles = self.state_machine.get_state().await;
-        tracing::info!(message = "Fetch vehicles", ?vehicles);
-        Ok(tonic::Response::new(GetPlatoonResponse {
-            vehicles: vehicles.iter().map(|v| v.clone().into()).collect(),
-        }))
+        let res = self.raft.ensure_linearizable().await;
+
+        match res {
+            Ok(_) => {
+                let vehicles = self
+                    .state_machine
+                    .get_state()
+                    .await
+                    .into_iter()
+                    .map(|v| v.into())
+                    .collect();
+
+                tracing::info!(message = "Vehicles read successfully", ?vehicles);
+                Ok(tonic::Response::new(GetPlatoonResponse { vehicles }))
+            }
+            Err(err) => match err {
+                RaftError::APIError(err) => match err {
+                    CheckIsLeaderError::ForwardToLeader(forward_to_leader) => {
+                        // Here we try to forward to the leader
+                        let leader =
+                            forward_to_leader
+                                .leader_node
+                                .ok_or(tonic::Status::unavailable(
+                                    "Leader is currently unavailable",
+                                ))?;
+
+                        let leader_addr = format!(
+                            "http://{}:{}",
+                            &leader.addr.split_once(":").expect("Wrong address format").0,
+                            self.port
+                        );
+                        tracing::info!(address = leader_addr, "Forwarding request to leader");
+                        let mut client = PlatoonServiceClient::connect(leader_addr).await.unwrap();
+
+                        client.get_platoon(tonic::Request::new(())).await
+                    }
+                    CheckIsLeaderError::QuorumNotEnough(quorum_not_enough) => {
+                        tracing::warn!(
+                            message = "Quorum not enough, cluster may be temporarily down",
+                            error = quorum_not_enough.to_string()
+                        );
+                        Err(tonic::Status::unavailable(format!(
+                            "Not enough nodes responding for quorum, cluster may be down: {}",
+                            quorum_not_enough.to_string().as_str()
+                        )))
+                    }
+                },
+                RaftError::Fatal(fatal) => {
+                    tracing::error!(
+                        message = "Fatal error in get_platoon",
+                        error = fatal.to_string()
+                    );
+                    Err(tonic::Status::internal(format!(
+                        "Fatal internal error: {}",
+                        fatal.to_string().as_str()
+                    )))
+                }
+            },
+        }
     }
 }

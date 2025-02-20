@@ -37,9 +37,7 @@ pub type LogEntry = openraft::Entry<TypeConfig>;
 pub type Responder = OneshotResponder<TypeConfig>;
 pub type NodeId = u64;
 pub type LogIndex = u64;
-pub type VoteId = u64;
 pub type Vote = openraft::Vote<NodeId>;
-pub type SnapshotId = String;
 pub type SnapshotData = Cursor<Vec<u8>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

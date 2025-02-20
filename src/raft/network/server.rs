@@ -11,24 +11,23 @@ use crate::grpc::utils;
 #[derive(Clone)]
 pub struct RaftServer {
     raft: Raft<crate::raft::types::TypeConfig>,
+    port: u16,
 }
 
 impl RaftServer {
-    pub fn new(raft_instance: Raft<crate::raft::types::TypeConfig>) -> Self {
+    pub fn new(raft_instance: Raft<crate::raft::types::TypeConfig>, port: u16) -> Self {
         Self {
             raft: raft_instance,
+            port,
         }
     }
 
-    pub fn start(&self) -> JoinHandle<Result<(), Error>> {
-        let raft_instance = self.raft.clone();
+    pub fn start(self) -> JoinHandle<Result<(), Error>> {
         tokio::task::spawn(async move {
-            static ADDRESS: &'static str = "0.0.0.0:5001";
-            let raft_service = RaftServer::new(raft_instance);
-
+            let address = format!("0.0.0.0:{}", self.port);
             tonic::transport::Server::builder()
-                .add_service(RaftServiceServer::new(raft_service))
-                .serve(ADDRESS.parse().expect("Invalid address"))
+                .add_service(RaftServiceServer::new(self))
+                .serve(address.parse().expect("Invalid address"))
                 .await
         })
     }

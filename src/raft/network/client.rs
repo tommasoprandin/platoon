@@ -2,12 +2,11 @@ use std::future::Future;
 
 use openraft::{
     error::{
-        Fatal, NetworkError, RPCError, RaftError, ReplicationClosed, StreamingError, Timeout,
-        Unreachable,
+        Fatal, NetworkError, RPCError, RaftError, ReplicationClosed, StreamingError, Unreachable,
     },
     network::RPCOption,
     raft::{AppendEntriesResponse, SnapshotResponse, VoteResponse},
-    AnyError, OptionalSend, RPCTypes, RaftNetwork, RaftNetworkFactory,
+    AnyError, OptionalSend, RaftNetwork, RaftNetworkFactory,
 };
 use tracing::instrument;
 
