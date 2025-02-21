@@ -1,13 +1,9 @@
 pub mod engine;
-mod log;
+pub mod log;
 pub mod state_machine;
 
 mod redb {
-    use std::{
-        path::{Path, PathBuf},
-        str::FromStr,
-        sync::Arc,
-    };
+    use std::{path::Path, sync::Arc};
 
     use openraft::{testing::StoreBuilder, StorageError};
     use tokio::sync::RwLock;
@@ -19,6 +15,7 @@ mod redb {
     pub struct RedbStorageBuilder {}
 
     impl RedbStorageBuilder {
+        #[cfg(test)]
         pub async fn new() -> Self {
             Self {}
         }
@@ -78,7 +75,6 @@ mod redb {
 #[cfg(test)]
 mod tests {
     use async_tempfile::TempFile;
-    use openraft::testing::StoreBuilder;
 
     use crate::raft::{
         storage::{

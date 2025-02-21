@@ -9,6 +9,7 @@ use super::super::types::{self, LogIndex};
 
 /// This trait defines all the operations a [`StorageEngine`] supports. All the methods are `async`
 /// to natively support the `tokio` runtime. Ofter implementations will wrap `sync` APIs.
+#[allow(unused)]
 pub trait StorageEngine {
     /// Inserts a single log entry into the persistent storage.
     ///
@@ -223,6 +224,7 @@ pub mod redb {
         LastPurged = 1,
     }
 
+    #[derive(Debug, Clone)]
     pub struct RedbStorageEngine {
         db: Arc<redb::Database>,
     }

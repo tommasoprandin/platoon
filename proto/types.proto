@@ -1,0 +1,55 @@
+syntax = "proto2";
+
+package types;
+
+message LogId {
+  required uint64 term = 1;
+  required uint64 index = 2;
+}
+
+message Vote {
+  required uint64 term = 1;
+  optional uint64 voted_for = 2;
+  required bool committed = 3;
+}
+
+message Vehicle {
+  required string id = 1;
+  required float x = 2;
+  required float y = 3;
+  required float speed = 4;
+  required float heading = 5;
+}
+
+message Node { required string address = 1; }
+message NodeIdSet { repeated uint64 node_ids = 1; }
+
+message Membership {
+  repeated NodeIdSet configs = 1;
+  map<uint64, Node> nodes = 2;
+}
+
+message SetPayload { required Vehicle vehicle = 1; }
+message DeletePayload { required string vehicle_id = 1; }
+message MembershipPayload { required Membership membership = 1; }
+
+message Entry {
+  required LogId log_id = 1;
+  oneof payload {
+    SetPayload set = 2;
+    DeletePayload delete = 3;
+    MembershipPayload membership = 4;
+  }
+}
+
+message StoredMembership {
+  optional LogId log_id = 1;
+  required Membership membership = 2;
+}
+
+message Snapshot {
+  optional LogId last_log_id = 1;
+  required StoredMembership last_membership = 2;
+  required string id = 3;
+  required bytes data = 4;
+}
