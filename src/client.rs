@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rand_distr::Normal;
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 use crate::{
     grpc::app::{platoon_service_client::PlatoonServiceClient, UpdateVehicleRequest},
@@ -146,15 +147,21 @@ impl PlatoonClient {
                         vehicle: vehicle.clone().into(),
                     });
                     req.set_timeout(Duration::from_millis(500));
-                    tracing::info!(message = "Updating vehicle", ?vehicle);
+                    let request_id = Uuid::now_v7();
+                    tracing::info!(message = "Updating vehicle", ?request_id, ?vehicle);
                     let res = client.update_vehicle(req).await;
                     match res {
                         Ok(_) => {
-                            tracing::info!(message = "Vehicle updated successfully!", ?vehicle);
+                            tracing::info!(
+                                message = "Vehicle updated successfully",
+                                ?request_id,
+                                ?vehicle
+                            );
                         }
                         Err(err) => {
                             tracing::error!(
                                 message = "Error in platoon client write",
+                                ?request_id,
                                 error = err.to_string()
                             );
                         }
@@ -177,16 +184,22 @@ impl PlatoonClient {
                     tokio::time::sleep(read_period).await;
                     let mut req = tonic::Request::new(());
                     req.set_timeout(Duration::from_millis(500));
-                    tracing::info!(message = "Reading vehicles");
+                    let request_id = Uuid::now_v7();
+                    tracing::info!(message = "Reading vehicles", ?request_id);
                     let res = client.get_platoon(req).await;
                     match res {
                         Ok(res) => {
                             let vehicles = res.into_inner().vehicles;
-                            tracing::info!(message = "Vehicles read successfully!", ?vehicles);
+                            tracing::info!(
+                                message = "Vehicles read successfully!",
+                                ?request_id,
+                                ?vehicles
+                            );
                         }
                         Err(err) => {
                             tracing::error!(
                                 message = "Error in platoon client write",
+                                ?request_id,
                                 error = err.to_string()
                             );
                         }

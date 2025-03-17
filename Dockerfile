@@ -1,6 +1,6 @@
 FROM rust:1.83-alpine3.21 AS chef
 WORKDIR /usr/src/platoon
-RUN apk add --no-cache musl-dev protobuf protobuf-dev && cargo install cargo-chef
+RUN apk add --no-cache musl-dev openssl-libs-static openssl-dev protobuf protobuf-dev && cargo install cargo-chef
 
 FROM chef AS planner
 COPY . .

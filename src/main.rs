@@ -9,6 +9,9 @@ use raft::{
 use server::PlatoonServer;
 use tokio::{select, sync::RwLock};
 use tracing::instrument;
+use tracing_loki::url::Url;
+use tracing_subscriber::{layer::SubscriberExt, registry::LookupSpan};
+use tracing_subscriber::{util::SubscriberInitExt, EnvFilter};
 
 mod client;
 pub mod grpc;
@@ -19,17 +22,17 @@ mod types;
 #[tokio::main]
 #[instrument]
 async fn main() {
-    // Tracing
-    console_subscriber::ConsoleLayer::builder()
-        .server_addr(([0, 0, 0, 0], 6669))
-        .init();
-
     // Environment
     // Node id
     let id: u64 = std::env::var("NODE_ID")
         .expect("Variable NODE_ID is not set")
         .parse()
         .expect("Failed to parse env var NODE_ID into u64");
+    // Cluster size
+    let cluster_size: u64 = std::env::var("CLUSTER_SIZE")
+        .expect("Variable CLUSTER_SIZE is not set")
+        .parse()
+        .expect("Failed to parse env var CLUSTER_SIZE into u32");
     // Raft server port
     let raft_server_port: u16 = std::env::var("RAFT_SERVER_PORT")
         .expect("Variable RAFT_SERVER_PORT is not set")
@@ -55,6 +58,25 @@ async fn main() {
         .expect("Variable READ_PERIOD is not set")
         .parse()
         .expect("Failed to parse env var READ_PERIOD into u64");
+
+    // Tracing
+    let (loki_layer, task) = tracing_loki::builder()
+        .extra_field("node", format!("{}", id))
+        .unwrap()
+        .build_url(Url::parse("http://logger:3100").expect("Failed to parse Loki address"))
+        .expect("Failed to instantiate Loki logger");
+
+    // We need to register our layer with `tracing`.
+    tracing_subscriber::registry()
+        .with(EnvFilter::from_default_env())
+        .with(loki_layer)
+        // One could add more layers here, for example logging to stdout:
+        .with(tracing_subscriber::fmt::Layer::new())
+        .init();
+
+    // The background task needs to be spawned so the logs actually get
+    // delivered.
+    tokio::spawn(task);
 
     // Create raft instance
     // Create storage
@@ -92,9 +114,9 @@ async fn main() {
     // Nodes (static cluster) initialized by node 1
     if id == 1 {
         let mut nodes = BTreeMap::new();
-        nodes.insert(1, BasicNode::new("node1:5001"));
-        nodes.insert(2, BasicNode::new("node2:5001"));
-        nodes.insert(3, BasicNode::new("node3:5001"));
+        for i in 1..=cluster_size {
+            nodes.insert(i, BasicNode::new(format!("node{i}:5001")));
+        }
         // Initialize raft instance
         let res = raft.initialize(nodes).await;
         match res {

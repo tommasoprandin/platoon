@@ -13,7 +13,6 @@ tracing-subscriber = { version = "0.3", features = [
     "tracing-log",
     "registry",
 ] }
-console-subscriber = "0.2"
 async-tempfile = "0.6.0"
 bincode = "1.3.3"
 openraft = { version = "0.9.17", features = [
@@ -35,5 +34,6 @@ tracing = { version = "0.1", features = ["log"] }
 rand = { version = "0.9.0", features = ["small_rng"] }
 lazy_static = "1.5.0"
 rand_distr = "0.5.1"
+tracing-loki = "0.2.6"
 [build-dependencies]
 tonic-build = "0.12.3"
