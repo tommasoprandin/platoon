@@ -10,8 +10,7 @@ use server::PlatoonServer;
 use tokio::{select, sync::RwLock};
 use tracing::instrument;
 use tracing_loki::url::Url;
-use tracing_subscriber::{layer::SubscriberExt, registry::LookupSpan};
-use tracing_subscriber::{util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod client;
 pub mod grpc;
@@ -60,10 +59,15 @@ async fn main() {
         .expect("Failed to parse env var READ_PERIOD into u64");
 
     // Tracing
+    let loki_url =
+        Url::parse("https://platoon-monitoring:3100").expect("Failed to parse Loki address");
+
     let (loki_layer, task) = tracing_loki::builder()
+        .label("source", "platoon")
+        .unwrap()
         .extra_field("node", format!("{}", id))
         .unwrap()
-        .build_url(Url::parse("http://logger:3100").expect("Failed to parse Loki address"))
+        .build_url(loki_url)
         .expect("Failed to instantiate Loki logger");
 
     // We need to register our layer with `tracing`.
@@ -115,7 +119,7 @@ async fn main() {
     if id == 1 {
         let mut nodes = BTreeMap::new();
         for i in 1..=cluster_size {
-            nodes.insert(i, BasicNode::new(format!("node{i}:5001")));
+            nodes.insert(i, BasicNode::new(format!("platoon-node-{}", i)));
         }
         // Initialize raft instance
         let res = raft.initialize(nodes).await;
